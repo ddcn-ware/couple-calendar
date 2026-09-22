@@ -21,6 +21,8 @@ import {
   endOfMonth,
   startOfWeek,
   endOfWeek,
+  startOfDay,
+  endOfDay,
 } from "date-fns";
 import { ChevronLeft, ChevronRight, LogOut, Plus, Settings } from "lucide-react";
 import toast from "react-hot-toast";
@@ -80,8 +82,8 @@ export default function CalendarPage() {
       start = startOfWeek(currentDate, { weekStartsOn: 0 });
       end = endOfWeek(currentDate, { weekStartsOn: 0 });
     } else {
-      start = currentDate;
-      end = currentDate;
+      start = startOfDay(currentDate);
+      end = endOfDay(currentDate);
     }
     try {
       const data = await api.events.list(start.toISOString(), end.toISOString());
