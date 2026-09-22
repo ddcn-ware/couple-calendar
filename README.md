@@ -1,186 +1,229 @@
 # Couple Calendar
 
-A self-hosted shared calendar for two people. Built with FastAPI + Next.js + PostgreSQL, runs entirely on your local machine with a single Docker command.
+A full-stack shared calendar application built for two people. Both users share a single calendar space with real-time sync — when one person adds or edits an event, the other sees it instantly without refreshing.
 
-## Quick Start
-
-### Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker + Docker Compose)
-
-### 1 — Copy env files
-
-```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.local.example frontend/.env.local
-```
-
-> **Optional:** Edit `backend/.env` and change `SECRET_KEY` to a long random string.
-
-### 2 — Start everything
-
-```bash
-cd couple-calendar
-docker compose up --build
-```
-
-This starts three containers:
-| Container | URL |
-|---|---|
-| Frontend (Next.js) | http://localhost:3000 |
-| Backend (FastAPI) | http://localhost:8000 |
-| PostgreSQL | localhost:5432 |
-
-Migrations run automatically on backend startup. No manual steps needed.
-
-### 3 — Seed test data (optional)
-
-In a second terminal, after the containers are running:
-
-```bash
-docker compose exec backend python scripts/seed.py
-```
-
-This creates two paired accounts:
-- **alice@example.com** — display name: Alice
-- **bob@example.com** — display name: Bob
-- Couple invite code: `TESTXY`
-
-### 4 — Log in
-
-1. Open http://localhost:3000
-2. Enter an email address and click **Send magic link**
-3. **Check the backend terminal** — the link is printed there (no email needed)
-4. Copy/paste the link into your browser
-5. You're in! If first time, you'll be redirected to set up a couple space.
+**Live app:** [couple-calendar-frontend-production.up.railway.app](https://couple-calendar-frontend-production.up.railway.app)
 
 ---
 
-## Using the App
+## Features
 
-### Pairing
-- **First user**: Click "Create space" → share the 6-character invite code
-- **Second user**: Click "Join with code" → enter the invite code
-
-### Calendar
-| Feature | How |
-|---|---|
-| Switch views | Month / Week / Day buttons (top right) |
-| Create event | Click **New event** button, or click any day/time slot |
-| Edit/Delete event | Click any event chip |
-| Real-time sync | Changes appear instantly on the partner's screen via WebSocket |
-| Reminders | Toast notification 30 min and 10 min before an event |
-
-### Event colours
-Eight colour options per event to visually distinguish whose event it is or categorise by type.
+- **Shared calendar space** — two users paired via a 6-character invite code
+- **Real-time sync** — changes appear instantly on both screens via WebSockets
+- **Three calendar views** — month, week, and day
+- **Full event management** — create, edit, and delete events with title, description, date/time, location, and colour tag
+- **Email + password auth** — simple account creation, JWT-based sessions
+- **In-app reminders** — toast notifications 30 and 10 minutes before upcoming events
+- **Responsive design** — works on mobile and desktop
+- **Persistent data** — PostgreSQL database, all events saved permanently
 
 ---
 
-## Development (without Docker)
+## Tech Stack
 
 ### Backend
-
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# Start Postgres locally (or adjust DATABASE_URL in .env)
-cp .env.example .env
-
-# Run migrations
-DATABASE_URL_SYNC=postgresql://couple:couple@localhost:5432/couple_calendar \
-  alembic upgrade head
-
-# Start API
-uvicorn app.main:app --reload
-```
+| Technology | Purpose |
+|---|---|
+| **Python / FastAPI** | REST API framework — handles all business logic and HTTP endpoints |
+| **SQLAlchemy (async)** | ORM — maps Python classes to database tables, handles all queries |
+| **Alembic** | Database migrations — version-controls the schema |
+| **PostgreSQL** | Primary database — stores users, couples, and events |
+| **WebSockets (FastAPI)** | Real-time sync — pushes event changes to connected clients instantly |
+| **python-jose** | JWT token creation and validation for auth sessions |
+| **passlib + bcrypt** | Secure password hashing |
+| **Pydantic** | Request/response validation and serialisation |
+| **Uvicorn** | ASGI server that runs the FastAPI app |
 
 ### Frontend
+| Technology | Purpose |
+|---|---|
+| **Next.js 14 (App Router)** | React framework — handles routing, server/client components |
+| **React** | UI component library |
+| **TypeScript** | Type safety across all frontend code |
+| **Tailwind CSS** | Utility-first CSS framework for styling |
+| **date-fns** | Date manipulation — calendar grid generation, formatting, comparisons |
+| **lucide-react** | Icon library |
+| **react-hot-toast** | In-app toast notifications for reminders and feedback |
+| **WebSocket API (browser)** | Connects to the FastAPI WebSocket endpoint for real-time updates |
 
-```bash
-cd frontend
-npm install
-cp .env.local.example .env.local
-npm run dev
-```
+### Infrastructure
+| Technology | Purpose |
+|---|---|
+| **Railway** | Cloud hosting for backend, frontend, and database |
+| **Docker / Docker Compose** | Local development environment — one command to run everything |
+| **GitHub** | Source control and Railway deployment trigger |
 
 ---
 
 ## Architecture
 
 ```
-couple-calendar/
-├── backend/
-│   ├── app/
-│   │   ├── main.py           # FastAPI app + CORS
-│   │   ├── core/
-│   │   │   ├── config.py     # Pydantic settings
-│   │   │   ├── security.py   # JWT + magic token helpers
-│   │   │   ├── deps.py       # get_current_user dependency
-│   │   │   └── ws_manager.py # WebSocket connection manager
-│   │   ├── db/session.py     # SQLAlchemy async engine
-│   │   ├── models/models.py  # User, Couple, Event, MagicToken
-│   │   ├── schemas/schemas.py# Pydantic request/response models
-│   │   └── routers/
-│   │       ├── auth.py       # Magic link + JWT auth
-│   │       ├── couples.py    # Create/join/leave couple space
-│   │       ├── events.py     # Event CRUD + WS broadcast
-│   │       └── ws.py         # WebSocket endpoint
-│   ├── alembic/              # Database migrations
-│   ├── scripts/seed.py       # Test data seeder
-│   └── requirements.txt
-└── frontend/
-    └── src/
-        ├── app/
-        │   ├── page.tsx              # Login (magic link request)
-        │   ├── auth/verify/page.tsx  # Magic link verify + redirect
-        │   ├── pair/page.tsx         # Create/join couple space
-        │   └── calendar/page.tsx     # Main calendar app
-        ├── components/calendar/
-        │   ├── MonthView.tsx
-        │   ├── WeekView.tsx
-        │   ├── DayView.tsx
-        │   └── EventModal.tsx
-        ├── hooks/
-        │   ├── useCalendarWs.ts     # WebSocket hook (auto-reconnect)
-        │   └── useReminders.ts      # In-app reminder toasts
-        └── lib/
-            ├── api.ts               # Typed API client
-            └── types.ts             # Shared TypeScript types
+┌─────────────────────────────────────────────────────────┐
+│                      Frontend (Next.js)                  │
+│  Login → Pair → Calendar (Month / Week / Day views)      │
+│  WebSocket client for real-time event updates            │
+└──────────────────────┬──────────────────────────────────┘
+                       │ HTTPS REST + WebSocket
+┌──────────────────────▼──────────────────────────────────┐
+│                    Backend (FastAPI)                      │
+│  /auth  — register, login, JWT session                   │
+│  /couple — create space, join with code                  │
+│  /events — CRUD, broadcasts changes via WebSocket        │
+│  /ws/{couple_id} — WebSocket connection per couple       │
+└──────────────────────┬──────────────────────────────────┘
+                       │ SQLAlchemy async
+┌──────────────────────▼──────────────────────────────────┐
+│                   PostgreSQL Database                     │
+│  users · couples · events · magic_tokens                 │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Data model
 
 ```
-User  ──── couple_id ──▶  Couple
-                             │
-                             └── invite_code (6 chars, shareable)
-                             │
-Event ──── couple_id ────────┘
+User ──── couple_id ──▶ Couple ◀──── invite_code (6 chars)
+                           │
+Event ──── couple_id ──────┘
       ──── creator_id ──▶ User
 ```
 
+### Real-time sync flow
+
+1. Both users connect to `/ws/{couple_id}` with their JWT token on page load
+2. When any user creates, edits, or deletes an event via the REST API, the backend broadcasts a WebSocket message to all connected clients in that couple space
+3. The frontend WebSocket hook receives the message and updates the calendar state instantly — no polling, no refresh needed
+
+### Auth flow
+
+1. User submits email + password to `POST /auth/register` or `POST /auth/login`
+2. Backend returns a signed JWT (30-day expiry)
+3. Token stored in `localStorage`, sent as `Authorization: Bearer <token>` on every request
+4. `get_current_user` FastAPI dependency validates the token on every protected endpoint
+
 ---
 
-## Stopping / resetting
+## Project Structure
 
-```bash
-# Stop
-docker compose down
-
-# Stop and wipe the database
-docker compose down -v
+```
+couple-calendar/
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI app entry point, CORS config
+│   │   ├── core/
+│   │   │   ├── config.py        # Environment variables via Pydantic Settings
+│   │   │   ├── security.py      # JWT creation/validation, password hashing
+│   │   │   ├── deps.py          # get_current_user FastAPI dependency
+│   │   │   └── ws_manager.py    # WebSocket connection manager (broadcast)
+│   │   ├── db/session.py        # Async SQLAlchemy engine + session factory
+│   │   ├── models/models.py     # ORM models: User, Couple, Event, MagicToken
+│   │   ├── schemas/schemas.py   # Pydantic schemas for request/response
+│   │   └── routers/
+│   │       ├── auth.py          # Register, login, /me endpoints
+│   │       ├── couples.py       # Create/join/leave couple space
+│   │       ├── events.py        # Event CRUD + WebSocket broadcast
+│   │       └── ws.py            # WebSocket endpoint
+│   ├── alembic/                 # Database migration files
+│   ├── scripts/seed.py          # Seed script for test data
+│   ├── start.sh                 # Production startup (migrate then serve)
+│   └── requirements.txt
+│
+└── frontend/
+    └── src/
+        ├── app/
+        │   ├── page.tsx                  # Login / register page
+        │   ├── pair/page.tsx             # Create or join couple space
+        │   └── calendar/page.tsx         # Main calendar app
+        ├── components/calendar/
+        │   ├── MonthView.tsx             # Month grid view
+        │   ├── WeekView.tsx              # 7-column time grid
+        │   ├── DayView.tsx               # Single day hour grid
+        │   └── EventModal.tsx            # Create / edit / delete modal
+        ├── hooks/
+        │   ├── useCalendarWs.ts          # WebSocket hook with auto-reconnect
+        │   └── useReminders.ts           # Reminder toast notifications
+        └── lib/
+            ├── api.ts                    # Typed fetch client for all endpoints
+            └── types.ts                  # Shared TypeScript interfaces
 ```
 
 ---
 
-## Accessing from another device on your home network
+## Running Locally
 
-Find your machine's local IP (e.g. `192.168.1.42`), then:
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
-1. Edit `frontend/.env.local`: `NEXT_PUBLIC_API_URL=http://192.168.1.42:8000`
-2. Update `backend/.env`: `FRONTEND_URL=http://192.168.1.42:3000`
-3. Rebuild: `docker compose up --build`
-4. Open `http://192.168.1.42:3000` on any device on your network
+### Start everything with one command
 
-For remote access from outside your home, set up [Tailscale](https://tailscale.com/) (free, no port-forwarding required).
+```bash
+git clone https://github.com/ddcn-ware/couple-calendar.git
+cd couple-calendar
+docker compose up --build
+```
+
+- Frontend: http://localhost:3000
+- Backend API + docs: http://localhost:8000/docs
+- Database migrations run automatically on startup
+
+### Load test data (optional)
+
+```bash
+docker compose exec backend python scripts/seed.py
+```
+
+Creates two paired accounts:
+- `alice@example.com` / `bob@example.com`
+- Invite code: `TESTXY`
+- 8 sample events across the next two weeks
+
+### Stop
+
+```bash
+docker compose down        # stop (data preserved)
+docker compose down -v     # stop and wipe database
+```
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/auth/register` | Create account, returns JWT |
+| `POST` | `/auth/login` | Login, returns JWT |
+| `GET` | `/auth/me` | Get current user |
+| `POST` | `/couple/create` | Create a new couple space |
+| `POST` | `/couple/join` | Join with invite code |
+| `GET` | `/couple/me` | Get current couple + members |
+| `GET` | `/events` | List events (filterable by date range) |
+| `POST` | `/events` | Create event |
+| `PATCH` | `/events/{id}` | Update event |
+| `DELETE` | `/events/{id}` | Delete event |
+| `WS` | `/ws/{couple_id}` | WebSocket connection for real-time sync |
+
+Full interactive docs available at `/docs` (Swagger UI) when running locally.
+
+---
+
+## Deployment
+
+Deployed on [Railway](https://railway.app) as three services:
+
+- **Backend** — Python/FastAPI service, migrations run on startup via `start.sh`
+- **Frontend** — Next.js service
+- **Database** — Railway-managed PostgreSQL
+
+Pushes to the `main` branch on GitHub trigger automatic redeployment of both services.
+
+---
+
+## What I Learned / Built
+
+- Designed and implemented a full-stack application from scratch with a decoupled frontend and backend
+- Built a real-time sync system using WebSockets — the backend maintains a connection registry per couple space and broadcasts mutations to all connected clients
+- Implemented JWT-based passwordless and password auth flows from first principles without a third-party auth library
+- Used SQLAlchemy's async interface with PostgreSQL for non-blocking database access
+- Managed database schema changes with Alembic migrations, including production deployment where migrations run automatically before the server starts
+- Built three calendar view modes (month, week, day) with a custom grid layout using CSS Grid and date-fns for all date arithmetic
+- Containerised the full stack with Docker Compose for reproducible local development
+- Deployed to Railway with environment-specific configuration via environment variables
