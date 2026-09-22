@@ -28,16 +28,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   auth: {
-    requestMagicLink: (email: string, display_name?: string) =>
-      request("/auth/magic-link", {
+    register: (email: string, password: string, display_name?: string): Promise<{ access_token: string }> =>
+      request("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ email, display_name }),
+        body: JSON.stringify({ email, password, display_name }),
       }),
 
-    verify: async (token: string): Promise<{ access_token: string }> =>
-      request("/auth/verify", {
+    login: (email: string, password: string): Promise<{ access_token: string }> =>
+      request("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ email, password }),
       }),
 
     me: (): Promise<User> => request("/auth/me"),

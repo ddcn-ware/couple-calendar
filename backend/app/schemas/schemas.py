@@ -7,13 +7,15 @@ from pydantic import BaseModel, EmailStr
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-class MagicLinkRequest(BaseModel):
+class RegisterRequest(BaseModel):
     email: EmailStr
+    password: str
     display_name: Optional[str] = None
 
 
-class MagicLinkVerify(BaseModel):
-    token: str
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
 
 
 class TokenResponse(BaseModel):
