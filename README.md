@@ -2,7 +2,7 @@
 
 A full-stack shared calendar application built for two people. Both users share a single calendar space with real-time sync — when one person adds or edits an event, the other sees it instantly without refreshing.
 
-**Live app:** [couple-calendar-frontend-production.up.railway.app](https://couple-calendar-frontend-production.up.railway.app)
+**Live app (Railway — cloud hosted):** [couple-calendar-frontend-production.up.railway.app](https://couple-calendar-frontend-production.up.railway.app)
 
 ---
 
@@ -16,6 +16,27 @@ A full-stack shared calendar application built for two people. Both users share 
 - **In-app reminders** — toast notifications 30 and 10 minutes before upcoming events
 - **Responsive design** — works on mobile and desktop
 - **Persistent data** — PostgreSQL database, all events saved permanently
+
+---
+
+## Deployment Options
+
+The app supports two deployment modes:
+
+### ☁️ Cloud (Railway) — recommended
+Hosted on [Railway](https://railway.app). Both users can access the app from anywhere in the world on any device — no local machine needed, no same WiFi requirement. Pushes to the `main` GitHub branch automatically redeploy the app.
+
+- **Frontend:** Next.js service on Railway
+- **Backend:** FastAPI service on Railway
+- **Database:** Railway-managed PostgreSQL (persistent, never wiped)
+- **Access:** Public HTTPS URL, works on any device anywhere
+
+### 🖥️ Local (Docker Compose) — first version
+Runs entirely on your own machine. Originally built before cloud deployment was added. Useful for development or if you want full local control with no external services.
+
+- **Limitation:** Only accessible on your local machine (or home network via LAN)
+- **Requirement:** Docker Desktop installed, machine must be running
+- **Data:** Stored in a local Docker volume — persists between restarts unless you run `docker compose down -v`
 
 ---
 
@@ -52,6 +73,40 @@ A full-stack shared calendar application built for two people. Both users share 
 | **Railway** | Cloud hosting for backend, frontend, and database |
 | **Docker / Docker Compose** | Local development environment — one command to run everything |
 | **GitHub** | Source control and Railway deployment trigger |
+
+---
+
+## Running Locally (Docker)
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+### Start everything with one command
+
+```bash
+git clone https://github.com/ddcn-ware/couple-calendar.git
+cd couple-calendar
+docker compose up --build
+```
+
+- Frontend: http://localhost:3000
+- Backend API + docs: http://localhost:8000/docs
+- Migrations run automatically on startup
+
+### Load test data (optional)
+
+```bash
+docker compose exec backend python scripts/seed.py
+```
+
+Creates two paired accounts (`alice@example.com` / `bob@example.com`, invite code `TESTXY`) with 8 sample events.
+
+### Stop
+
+```bash
+docker compose down        # stop (data preserved)
+docker compose down -v     # stop and wipe database
+```
 
 ---
 
@@ -102,6 +157,35 @@ Event ──── couple_id ──────┘
 
 ---
 
+## Cloud Deployment (Railway)
+
+Three Railway services all connected to one PostgreSQL database:
+
+| Service | Source | Notes |
+|---|---|---|
+| **Backend** | `couple-calendar` repo, root: `backend/` | Runs `start.sh` — migrates then starts uvicorn |
+| **Frontend** | `couple-calendar-frontend` repo | Runs `npm run start` on Railway-assigned port |
+| **Database** | Railway PostgreSQL plugin | `DATABASE_URL` auto-injected into backend |
+
+**Environment variables required on backend service:**
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Auto-injected by Railway Postgres |
+| `DATABASE_URL_SYNC` | Reference to `${{Postgres.DATABASE_URL}}` |
+| `SECRET_KEY` | Any long random string |
+| `FRONTEND_URL` | Your Railway frontend URL |
+
+**Environment variables required on frontend service:**
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | Your Railway backend URL |
+
+Pushes to `main` on GitHub trigger automatic redeployment of both services.
+
+---
+
 ## Project Structure
 
 ```
@@ -144,43 +228,6 @@ couple-calendar/
         └── lib/
             ├── api.ts                    # Typed fetch client for all endpoints
             └── types.ts                  # Shared TypeScript interfaces
-```
-
----
-
-## Running Locally
-
-### Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-
-### Start everything with one command
-
-```bash
-git clone https://github.com/ddcn-ware/couple-calendar.git
-cd couple-calendar
-docker compose up --build
-```
-
-- Frontend: http://localhost:3000
-- Backend API + docs: http://localhost:8000/docs
-- Database migrations run automatically on startup
-
-### Load test data (optional)
-
-```bash
-docker compose exec backend python scripts/seed.py
-```
-
-Creates two paired accounts:
-- `alice@example.com` / `bob@example.com`
-- Invite code: `TESTXY`
-- 8 sample events across the next two weeks
-
-### Stop
-
-```bash
-docker compose down        # stop (data preserved)
-docker compose down -v     # stop and wipe database
 ```
 
 ---
