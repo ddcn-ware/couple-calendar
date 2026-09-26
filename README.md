@@ -19,6 +19,18 @@ A full-stack shared calendar application built for two people. Both users share 
 
 ---
 
+## How It Works (the simple version)
+
+1. **You make an account** with your email and a password. The server gives your browser a "pass" (a JWT token) that proves who you are, so you don't have to log in every time.
+2. **You pair up.** One person clicks *Create space* and gets a 6-letter code like `K7QX2M`. They send it to their partner, who types it into *Join with code*. Now both accounts point at the same "couple", and a couple can only have 2 people.
+3. **You add events.** Events belong to the couple, not to one person, so both of you see and can edit everything.
+4. **Changes show up live.** While the calendar is open, each browser keeps a WebSocket connection to the server (like an open phone line). When someone adds, edits or deletes an event, the server tells everyone on that couple's line and their calendar updates without a refresh.
+5. **Reminders.** While the tab is open, the app checks every minute and pops up a message 30 and 10 minutes before an event.
+
+The frontend (what you see, in `frontend/`) and the backend (the server + database, in `backend/`) are separate apps that talk over HTTP. The frontend never touches the database directly.
+
+---
+
 ## Deployment Options
 
 The app supports two deployment modes:
@@ -86,6 +98,11 @@ Runs entirely on your own machine. Originally built before cloud deployment was 
 ```bash
 git clone https://github.com/ddcn-ware/couple-calendar.git
 cd couple-calendar
+
+# docker compose needs these env files to exist (the defaults work for local)
+cp backend/.env.example backend/.env
+cp frontend/.env.local.example frontend/.env.local
+
 docker compose up --build
 ```
 
@@ -99,7 +116,14 @@ docker compose up --build
 docker compose exec backend python scripts/seed.py
 ```
 
-Creates two paired accounts (`alice@example.com` / `bob@example.com`, invite code `TESTXY`) with 8 sample events.
+Creates two paired accounts with 8 sample events over the next two weeks:
+
+| Email | Password |
+|---|---|
+| `alice@example.com` | `password123` |
+| `bob@example.com` | `password123` |
+
+⚠️ The seed script **deletes all existing users, couples and events** first, so only run it on a local database.
 
 ### Stop
 
@@ -129,7 +153,7 @@ docker compose down -v     # stop and wipe database
                        │ SQLAlchemy async
 ┌──────────────────────▼──────────────────────────────────┐
 │                   PostgreSQL Database                     │
-│  users · couples · events · magic_tokens                 │
+│  users · couples · events  (+ unused magic_tokens)       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -141,6 +165,11 @@ User ──── couple_id ──▶ Couple ◀──── invite_code (6 char
 Event ──── couple_id ──────┘
       ──── creator_id ──▶ User
 ```
+
+- A **User** has no couple until they create or join one (`couple_id` is null).
+- A **Couple** has at most 2 members. This is checked in `POST /couple/join`, not by the database.
+- **Events** belong to the couple, so either partner can edit or delete any event. `creator_id` is only used to show "Created by …".
+- `magic_tokens` is left over from the first version, which used email magic-link login. Nothing uses it now, but it stays because it's part of the first migration.
 
 ### Real-time sync flow
 
@@ -199,24 +228,27 @@ couple-calendar/
 │   │   │   ├── deps.py          # get_current_user FastAPI dependency
 │   │   │   └── ws_manager.py    # WebSocket connection manager (broadcast)
 │   │   ├── db/session.py        # Async SQLAlchemy engine + session factory
-│   │   ├── models/models.py     # ORM models: User, Couple, Event, MagicToken
+│   │   ├── models/models.py     # Database tables: User, Couple, Event, MagicToken (unused)
 │   │   ├── schemas/schemas.py   # Pydantic schemas for request/response
 │   │   └── routers/
 │   │       ├── auth.py          # Register, login, /me endpoints
 │   │       ├── couples.py       # Create/join/leave couple space
 │   │       ├── events.py        # Event CRUD + WebSocket broadcast
 │   │       └── ws.py            # WebSocket endpoint
-│   ├── alembic/                 # Database migration files
+│   ├── alembic/versions/        # Database migrations (0001 tables, 0002 password_hash)
 │   ├── scripts/seed.py          # Seed script for test data
 │   ├── start.sh                 # Production startup (migrate then serve)
 │   └── requirements.txt
+│
+├── docker-compose.yml           # Local setup: postgres + backend + frontend
 │
 └── frontend/
     └── src/
         ├── app/
         │   ├── page.tsx                  # Login / register page
         │   ├── pair/page.tsx             # Create or join couple space
-        │   └── calendar/page.tsx         # Main calendar app
+        │   ├── calendar/page.tsx         # Main calendar app (holds all the state)
+        │   └── auth/verify/page.tsx      # Old magic-link page, just redirects to /
         ├── components/calendar/
         │   ├── MonthView.tsx             # Month grid view
         │   ├── WeekView.tsx              # 7-column time grid
@@ -239,28 +271,39 @@ couple-calendar/
 | `POST` | `/auth/register` | Create account, returns JWT |
 | `POST` | `/auth/login` | Login, returns JWT |
 | `GET` | `/auth/me` | Get current user |
+| `PATCH` | `/auth/me` | Change display name (no UI for this yet) |
 | `POST` | `/couple/create` | Create a new couple space |
 | `POST` | `/couple/join` | Join with invite code |
-| `GET` | `/couple/me` | Get current couple + members |
-| `GET` | `/events` | List events (filterable by date range) |
+| `GET` | `/couple/me` | Get current couple + members (404 = not paired yet) |
+| `DELETE` | `/couple/leave` | Leave your couple space (no UI for this yet) |
+| `GET` | `/events?start=&end=` | List events that overlap a date range |
 | `POST` | `/events` | Create event |
-| `PATCH` | `/events/{id}` | Update event |
+| `GET` | `/events/{id}` | Get one event |
+| `PATCH` | `/events/{id}` | Update event (only the fields you send) |
 | `DELETE` | `/events/{id}` | Delete event |
-| `WS` | `/ws/{couple_id}` | WebSocket connection for real-time sync |
+| `WS` | `/ws/{couple_id}?token=<jwt>` | WebSocket connection for real-time sync |
+| `GET` | `/health` | Health check used by Railway |
 
-Full interactive docs available at `/docs` (Swagger UI) when running locally.
+Everything except register, login and health needs an `Authorization: Bearer <token>` header. Full interactive docs are at `/docs` (Swagger UI) when running locally.
+
+WebSocket messages the server sends:
+
+```json
+{ "type": "event_created", "event": { ...event } }
+{ "type": "event_updated", "event": { ...event } }
+{ "type": "event_deleted", "event_id": "..." }
+```
 
 ---
 
-## Deployment
+## Known Issues / Future Improvements
 
-Deployed on [Railway](https://railway.app) as three services:
-
-- **Backend** — Python/FastAPI service, migrations run on startup via `start.sh`
-- **Frontend** — Next.js service
-- **Database** — Railway-managed PostgreSQL
-
-Pushes to the `main` branch on GitHub trigger automatic redeployment of both services.
+- **Week and day views** only draw an event on the day it starts, and overlapping events draw on top of each other.
+- **Reminders** only work while the calendar tab is open. There are no email or push notifications.
+- **CORS is open to all origins** (`allow_origins=["*"]`). It should be limited to `FRONTEND_URL`.
+- The WebSocket manager keeps connections in memory, so it only works with a single backend process.
+- No UI yet for leaving a couple or changing your display name, although the endpoints exist.
+- No automated tests.
 
 ---
 
@@ -268,7 +311,7 @@ Pushes to the `main` branch on GitHub trigger automatic redeployment of both ser
 
 - Designed and implemented a full-stack application from scratch with a decoupled frontend and backend
 - Built a real-time sync system using WebSockets — the backend maintains a connection registry per couple space and broadcasts mutations to all connected clients
-- Implemented JWT-based passwordless and password auth flows from first principles without a third-party auth library
+- Implemented JWT auth without a third-party auth library, first as passwordless magic links, then switched to email + password with bcrypt hashing
 - Used SQLAlchemy's async interface with PostgreSQL for non-blocking database access
 - Managed database schema changes with Alembic migrations, including production deployment where migrations run automatically before the server starts
 - Built three calendar view modes (month, week, day) with a custom grid layout using CSS Grid and date-fns for all date arithmetic

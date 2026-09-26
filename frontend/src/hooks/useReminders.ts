@@ -4,9 +4,14 @@ import toast from "react-hot-toast";
 import { differenceInMinutes, isFuture, parseISO } from "date-fns";
 import type { CalendarEvent } from "@/lib/types";
 
+// Shows a popup 30 min and 10 min before an event starts.
+// Only works while the calendar tab is open - there's no email/push notification.
+// Also only checks events that are loaded (i.e. in the current month/week/day on screen).
+
 const REMIND_MINUTES = [30, 10];
 
 export function useReminders(events: CalendarEvent[]) {
+  // remembers which reminders already fired ("<eventId>-30") so they don't repeat
   const notified = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -18,6 +23,7 @@ export function useReminders(events: CalendarEvent[]) {
         const diff = differenceInMinutes(start, now);
         for (const threshold of REMIND_MINUTES) {
           const key = `${ev.id}-${threshold}`;
+          // 2 minute window since we only check once a minute and could just miss it
           if (diff <= threshold && diff > threshold - 2 && !notified.current.has(key)) {
             notified.current.add(key);
             toast(`⏰ "${ev.title}" starts in ${threshold} minutes`, {

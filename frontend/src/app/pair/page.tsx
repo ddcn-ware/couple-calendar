@@ -5,11 +5,14 @@ import { api } from "@/lib/api";
 import type { Couple } from "@/lib/types";
 import toast from "react-hot-toast";
 
+// "/pair" - shown when you're logged in but not linked to a partner yet.
+// Either create a new space (get a code to share) or join with your partner's code.
 export default function PairPage() {
   const router = useRouter();
   const [tab, setTab] = useState<"create" | "join">("create");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+  // once this is set we show the "You're paired!" screen with the invite code
   const [couple, setCouple] = useState<Couple | null>(null);
 
   async function handleCreate() {

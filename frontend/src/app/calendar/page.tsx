@@ -29,13 +29,17 @@ import toast from "react-hot-toast";
 
 type ViewMode = "month" | "week" | "day";
 
+// "/calendar" - the main page. Holds all the state (user, couple, events,
+// which view, which date) and passes it down to the Month/Week/Day views
+// and the event modal.
 export default function CalendarPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [couple, setCouple] = useState<Couple | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [view, setView] = useState<ViewMode>("month");
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date()); // the date we're looking at
+  // event = editing an existing one, defaultDate = where you clicked to make a new one
   const [modalState, setModalState] = useState<{
     open: boolean;
     event?: CalendarEvent;
@@ -44,6 +48,8 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
+  // on page load: no token -> login page, no couple -> pair page,
+  // token doesn't work anymore (expired etc) -> clear it and go to login
   useEffect(() => {
     const token = localStorage.getItem("cc_token");
     if (!token) {
@@ -73,9 +79,11 @@ export default function CalendarPage() {
     loadEvents();
   }, [couple, view, currentDate]);
 
+  // only fetch the events for what's on screen, not everything ever
   async function loadEvents() {
     let start: Date, end: Date;
     if (view === "month") {
+      // month grid also shows a few days from the months before/after, so include those
       start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 });
       end = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 0 });
     } else if (view === "week") {
@@ -94,16 +102,21 @@ export default function CalendarPage() {
   }
 
   // ── Real-time WebSocket updates ────────────────────────────────────────────
+  // the backend sends these to both of us, including for events I made myself
   const handleWsMessage = useCallback((msg: WsMessage) => {
     if (msg.type === "event_created") {
       setEvents((prev) => {
+        // already have it (because I created it in this tab) -> don't add it twice
         if (prev.find((e) => e.id === msg.event.id)) return prev;
         return [...prev, msg.event].sort(
           (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
         );
       });
-      const other = couple?.members.find((m) => m.id !== user?.id);
-      toast(`${other?.display_name ?? "Partner"} added "${msg.event.title}"`, { icon: "📅" });
+      // only show the toast for my partner's events, not ones I just made
+      if (msg.event.creator_id !== user?.id) {
+        const other = couple?.members.find((m) => m.id !== user?.id);
+        toast(`${other?.display_name ?? "Partner"} added "${msg.event.title}"`, { icon: "📅" });
+      }
     } else if (msg.type === "event_updated") {
       setEvents((prev) => prev.map((e) => (e.id === msg.event.id ? msg.event : e)));
     } else if (msg.type === "event_deleted") {
@@ -134,6 +147,8 @@ export default function CalendarPage() {
   }
 
   // ── Event CRUD callbacks ───────────────────────────────────────────────────
+  // called by EventModal after the API call works, so the change shows up
+  // straight away without waiting for the websocket message
   function onEventCreated(ev: CalendarEvent) {
     setEvents((prev) =>
       [...prev, ev].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())

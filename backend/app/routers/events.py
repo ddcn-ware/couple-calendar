@@ -1,3 +1,10 @@
+"""
+/events endpoints - create, read, update, delete calendar events.
+
+Every change also gets broadcast over the websocket (see ws_manager.py)
+so the other person's screen updates straight away without refreshing.
+You can only ever see/touch events that belong to your own couple.
+"""
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -23,6 +30,8 @@ def _require_couple(user: User) -> uuid.UUID:
 
 
 async def _get_event(event_id: uuid.UUID, couple_id: uuid.UUID, db: AsyncSession) -> Event:
+    # filtering by couple_id as well as id is important - otherwise someone
+    # could edit another couple's event if they guessed the id
     result = await db.execute(
         select(Event)
         .options(selectinload(Event.creator))
@@ -41,8 +50,11 @@ async def list_events(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Frontend passes the date range that's on screen (e.g. the month) as ?start=&end="""
     couple_id = _require_couple(current_user)
     filters = [Event.couple_id == couple_id]
+    # overlap check: event ends after the range starts AND starts before the range ends.
+    # this way events that are partly in the range still show up
     if start:
         filters.append(Event.end_at >= start)
     if end:
@@ -68,17 +80,18 @@ async def create_event(
         id=uuid.uuid4(),
         couple_id=couple_id,
         creator_id=current_user.id,
-        **body.model_dump(),
+        **body.model_dump(),  # title, description, location, color, start_at, end_at
     )
     db.add(event)
     await db.commit()
 
-    # Reload with creator relationship
+    # Reload with creator relationship (needed for EventOut.creator)
     result = await db.execute(
         select(Event).options(selectinload(Event.creator)).where(Event.id == event.id)
     )
     event = result.scalar_one()
 
+    # tell everyone connected to this couple (including the creator's own tab)
     await manager.broadcast(str(couple_id), {"type": "event_created", "event": EventOut.model_validate(event).model_dump()})
     return event
 
@@ -103,9 +116,12 @@ async def update_event(
     couple_id = _require_couple(current_user)
     event = await _get_event(event_id, couple_id, db)
 
+    # exclude_unset = only the fields the frontend actually sent,
+    # so a missing field doesn't overwrite the existing value with None
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(event, field, value)
 
+    # check after applying, since they might only have changed one of the two times
     if event.end_at <= event.start_at:
         raise HTTPException(status_code=400, detail="end_at must be after start_at.")
 
@@ -121,6 +137,7 @@ async def update_event(
     return event
 
 
+# either person can delete any event, not just ones they made
 @router.delete("/{event_id}", status_code=204)
 async def delete_event(
     event_id: uuid.UUID,
@@ -131,4 +148,5 @@ async def delete_event(
     event = await _get_event(event_id, couple_id, db)
     await db.delete(event)
     await db.commit()
+    # event is gone so just send the id
     await manager.broadcast(str(couple_id), {"type": "event_deleted", "event_id": str(event_id)})

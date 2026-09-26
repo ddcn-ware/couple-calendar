@@ -1,9 +1,16 @@
 """
 Seed two paired users and a handful of sample events.
+Handy for testing without having to sign up two accounts every time.
+
+WARNING: this deletes ALL existing users, couples and events first.
+Don't run it against the real Railway database.
 
 Usage (from backend/ directory):
-    DATABASE_URL_SYNC=postgresql://couple:couple@localhost:5432/couple_calendar \
+    DATABASE_URL=postgresql+asyncpg://couple:couple@localhost:5432/couple_calendar \
     python scripts/seed.py
+
+Or with docker:
+    docker compose exec backend python scripts/seed.py
 """
 import asyncio
 import os
@@ -17,12 +24,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.security import hash_password
 from app.models.models import Couple, Event, User
 
 DB_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://couple:couple@localhost:5432/couple_calendar",
 )
+
+# both test accounts use this so you can log in as either one
+TEST_PASSWORD = "password123"
 
 COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444"]
 
@@ -32,7 +43,7 @@ async def seed():
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     async with Session() as db:
-        # Wipe existing seed data
+        # Wipe existing data (events first because they reference users/couples)
         await db.execute(sa.text("DELETE FROM events"))
         await db.execute(sa.text("DELETE FROM users"))
         await db.execute(sa.text("DELETE FROM couples"))
@@ -46,19 +57,23 @@ async def seed():
             id=uuid.uuid4(),
             email="alice@example.com",
             display_name="Alice",
+            password_hash=hash_password(TEST_PASSWORD),
             couple_id=couple.id,
         )
         bob = User(
             id=uuid.uuid4(),
             email="bob@example.com",
             display_name="Bob",
+            password_hash=hash_password(TEST_PASSWORD),
             couple_id=couple.id,
         )
         db.add_all([alice, bob])
         await db.flush()
 
+        # midnight today (UTC), events are placed relative to this
         now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
+        # (title, description, location, creator, days from today, start hour, end hour, colour)
         sample_events = [
             ("Date night 🍷", "Dinner at La Maison", "La Maison Restaurant", alice.id, 1, 19, 21, COLORS[0]),
             ("Morning run 🏃", None, "Riverside Park", bob.id, 2, 7, 8, COLORS[4]),
@@ -92,8 +107,8 @@ async def seed():
     print("\n✅ Seed complete!")
     print(f"   Alice: alice@example.com")
     print(f"   Bob:   bob@example.com")
-    print(f"   Couple invite code: TESTXY")
-    print(f"   Request magic links via POST /auth/magic-link\n")
+    print(f"   Password (both): {TEST_PASSWORD}")
+    print(f"   Couple invite code: TESTXY\n")
     await engine.dispose()
 
 

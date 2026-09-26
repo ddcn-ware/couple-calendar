@@ -1,3 +1,7 @@
+"""
+/auth endpoints - sign up, log in, and get/update your own account.
+Register and login both just return a JWT, the frontend saves it in localStorage.
+"""
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -28,6 +32,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.commit()
 
+    # log them straight in after signing up
     return TokenResponse(access_token=create_access_token(subject=body.email))
 
 
@@ -36,17 +41,21 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
+    # same error for "no such user" and "wrong password" so people can't
+    # use this to check which emails have accounts
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     return TokenResponse(access_token=create_access_token(subject=body.email))
 
 
+# frontend calls this on load to check the saved token still works
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+# change display name (the frontend doesn't have a UI for this yet)
 @router.patch("/me", response_model=UserOut)
 async def update_me(
     body: UpdateDisplayName,

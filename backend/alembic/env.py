@@ -1,3 +1,8 @@
+"""
+Alembic config - runs every time you do `alembic upgrade head`.
+Mostly the default alembic template, the only real change is reading the
+database url from env vars so it works both locally and on Railway.
+"""
 import os
 import sys
 from logging.config import fileConfig

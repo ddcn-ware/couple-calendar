@@ -20,8 +20,10 @@ interface Props {
   onCreateAt: (date: Date) => void;
 }
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const HOURS = Array.from({ length: 24 }, (_, i) => i); // [0, 1, ... 23]
 
+// works out where to draw the event block: each hour row is 56px tall (h-14),
+// so an event at 2:30pm is 14.5 * 56px from the top. min height so short events are still clickable
 function positionStyle(ev: CalendarEvent) {
   const start = parseISO(ev.start_at);
   const end = parseISO(ev.end_at);
@@ -77,12 +79,15 @@ export function WeekView({ currentDate, events, currentUserId, onEventClick, onC
 
         {/* Day columns */}
         {days.map((day) => {
+          // note: events are only drawn on the day they start, so overnight events
+          // don't continue into the next column. Overlapping events also draw on top of each other
           const dayEvents = events.filter((ev) => isSameDay(parseISO(ev.start_at), day));
           return (
             <div
               key={day.toISOString()}
               className={clsx("flex-1 relative border-l border-slate-100", isToday(day) && "bg-indigo-50/20")}
               onClick={(e) => {
+                // turn the click position into an hour, then open "new event" at that time
                 const rect = e.currentTarget.getBoundingClientRect();
                 const y = e.clientY - rect.top;
                 const hour = Math.floor(y / 56);

@@ -4,6 +4,10 @@ Revision ID: 0001
 Revises:
 Create Date: 2024-01-01 00:00:00.000000
 
+Creates the 4 starting tables. Run with `alembic upgrade head`
+(start.sh / docker-compose do this automatically on startup).
+Never edit this file once it's been deployed - make a new migration instead,
+because alembic won't re-run a migration it has already applied.
 """
 from typing import Sequence, Union
 
@@ -70,7 +74,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
 
-    # magic_tokens
+    # magic_tokens - from the old magic link login, not used anymore
     op.create_table(
         "magic_tokens",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -83,6 +87,7 @@ def upgrade() -> None:
     op.create_index("ix_magic_tokens_email", "magic_tokens", ["email"])
 
 
+# undo everything, in reverse order (can't drop couples while users still point at it)
 def downgrade() -> None:
     op.drop_table("magic_tokens")
     op.drop_table("events")

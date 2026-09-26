@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 import type { CalendarEvent } from "@/lib/types";
-import { addHours } from "date-fns";
+import { addHours, format, parseISO } from "date-fns";
 import { X, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -17,11 +17,17 @@ const COLORS = [
   { label: "Teal", value: "#14b8a6" },
 ];
 
+// Popup for creating a new event or editing/deleting an existing one.
+// Same component for both - if `event` is passed in it's edit mode.
+
 function toDatetimeLocal(iso: string) {
-  // Convert ISO string to "YYYY-MM-DDTHH:mm" for datetime-local input
-  return iso.slice(0, 16);
+  // Convert ISO string to "YYYY-MM-DDTHH:mm" for datetime-local input.
+  // format() uses local time - just slicing the string gave UTC time, which was
+  // off by the timezone offset
+  return format(parseISO(iso), "yyyy-MM-dd'T'HH:mm");
 }
 
+// the input value has no timezone, new Date() treats it as local time -> convert to UTC ISO
 function fromDatetimeLocal(val: string) {
   return new Date(val).toISOString();
 }
@@ -39,6 +45,7 @@ interface Props {
 export function EventModal({ event, defaultDate, currentUserId, onClose, onCreated, onUpdated, onDeleted }: Props) {
   const isEdit = !!event;
 
+  // new events default to the start of the hour you clicked (or now), 1 hour long
   const defaultStart = defaultDate
     ? new Date(defaultDate)
     : new Date();

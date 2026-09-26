@@ -1,12 +1,20 @@
+// All the calls to the backend go through here, so components never
+// use fetch() directly. If an endpoint changes, this is the only place to update.
 import type { CalendarEvent, Couple, EventCreate, EventUpdate, User } from "./types";
 
+// NEXT_PUBLIC_ vars get baked into the JS at build time, so changing it
+// on Railway needs a redeploy to take effect
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// the JWT from login/register is saved in localStorage under "cc_token"
 function getToken(): string | null {
+  // localStorage doesn't exist when Next.js renders on the server
   if (typeof window === "undefined") return null;
   return localStorage.getItem("cc_token");
 }
 
+// wrapper around fetch that adds the auth header and turns errors into
+// exceptions with the backend's "detail" message (so we can toast it)
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -20,7 +28,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Request failed");
   }
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return undefined as T; // 204 = no body (e.g. delete), res.json() would throw
   return res.json();
 }
 
@@ -78,6 +86,8 @@ export const api = {
   },
 };
 
+// http://... -> ws://...  and  https://... -> wss://...
+// token goes in the url because browser websockets can't send headers
 export function wsUrl(coupleId: string): string {
   const token = getToken() ?? "";
   const wsBase = BASE.replace(/^http/, "ws");

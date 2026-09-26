@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import toast from "react-hot-toast";
 
+// Home page ("/") = login and sign up form (one form, two tabs)
 export default function LoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<"login" | "register">("login");
@@ -26,6 +27,7 @@ export default function LoginPage() {
       }
       localStorage.setItem("cc_token", token);
       toast.success("Logged in!");
+      // always go to /calendar - it redirects to /pair if you don't have a couple yet
       router.replace("/calendar");
     } catch (err: any) {
       toast.error(err.message);

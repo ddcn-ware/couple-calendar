@@ -17,6 +17,8 @@ interface Props {
   onCreateAt: (date: Date) => void;
 }
 
+// Same idea as WeekView but just one column, and a bit bigger (64px per hour, h-16)
+
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function positionStyle(ev: CalendarEvent) {
@@ -68,6 +70,7 @@ export function DayView({ currentDate, events, currentUserId, onEventClick, onCr
         <div
           className="flex-1 relative border-l border-slate-100"
           onClick={(e) => {
+            // click position -> hour -> open "new event" at that time
             const rect = e.currentTarget.getBoundingClientRect();
             const y = e.clientY - rect.top;
             const hour = Math.floor(y / 64);
